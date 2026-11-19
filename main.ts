@@ -1,88 +1,79 @@
-// gta6-meme-x-01 entry program (Node 22, standard library only).
+// Entry program for the gta6-meme-x-01 bounty (Node 22, stdlib only).
 //
-// Job: take POST.json from the repository root, check that the URL inside it
-// really points at one X post, and hand the file on to the output directory
-// where the gate reads it. The post itself is the entry — the house reads it
-// from X and judges its first picture and text — so this program only has to
-// make sure the address it hands over is well formed.
+// What it does, in plain terms:
+//   1. Read POST.json from the repository root (next to this file).
+//   2. Make sure the "url" inside it is a real X post address:
+//      https://x.com/<handle>/status/<numeric id> — nothing else counts.
+//   3. Copy that file into the output directory the house reads from
+//      (MAKEFUN_OUTPUT_DIR, default "out"), creating the directory if needed.
+//   4. Fail loudly (non-zero exit) if anything is off, so a bad entry is
+//      never submitted silently.
 //
-// A valid address looks like https://x.com/<handle>/status/<digits>:
-//   - scheme must be https (nothing else is a post address on X),
-//   - host must be exactly x.com,
-//   - path must be /<handle>/status/<id> where the id is digits only.
-// Anything else is rejected with a non-zero exit so a bad POST.json can
-// never slip through as a silent copy.
-//
-// Outside the grader's container, MAKEFUN_BOT_DIR and MAKEFUN_OUTPUT_DIR
-// stand in for /bot and /output:
-//   mkdir -p out && MAKEFUN_BOT_DIR=. MAKEFUN_OUTPUT_DIR=out node main.ts
+// The post itself is the entry; the house reads it straight from X.
+// This program only proves the address we hand in is well-formed.
 
-import { mkdirSync, readFileSync, writeFileSync } from 'node:fs';
-import { join } from 'node:path';
+import { mkdirSync, readFileSync, writeFileSync } from "node:fs";
+import { dirname, join } from "node:path";
+import { fileURLToPath } from "node:url";
 
-// Where the repository lives and where the gate expects the file.
-const repoDir = process.env.MAKEFUN_BOT_DIR ?? '/bot';
-const outDir = process.env.MAKEFUN_OUTPUT_DIR ?? '/output';
+// Resolve the repo root from this file's own location, so the program works
+// no matter which directory it is started from.
+const here = dirname(fileURLToPath(import.meta.url));
+const sourcePath = join(here, "POST.json");
 
-// The shape an X post address must have: handle, then /status/, then digits.
-const POST_URL = /^\/([^/]+)\/status\/([0-9]+)$/;
+// The output directory comes from the environment; "out" is the default
+// the kit's README uses.
+const outputDir = process.env.MAKEFUN_OUTPUT_DIR ?? "out";
+const targetPath = join(outputDir, "POST.json");
 
-function fail(message: string): never {
+function fail(message) {
   console.error(`main.ts: ${message}`);
   process.exit(1);
 }
 
-// Read the post file as text and parse it. A missing file or broken JSON
-// means there is no post address to hand over at all.
-let raw: string;
+// 1. Read and parse POST.json. A missing file or broken JSON is fatal.
+let raw;
 try {
-  raw = readFileSync(join(repoDir, 'POST.json'), 'utf8');
-} catch (err) {
-  fail(`cannot read POST.json from ${repoDir}: ${(err as Error).message}`);
-}
-
-let parsed: unknown;
-try {
-  parsed = JSON.parse(raw);
-} catch (err) {
-  fail(`POST.json is not valid JSON: ${(err as Error).message}`);
-}
-
-// The file must hold one object with a url string in it.
-if (typeof parsed !== 'object' || parsed === null || Array.isArray(parsed)) {
-  fail('POST.json must be a JSON object');
-}
-const urlText = (parsed as { url?: unknown }).url;
-if (typeof urlText !== 'string' || urlText.length === 0) {
-  fail('POST.json must hold a "url" string');
-}
-
-// Break the address apart and check each piece in turn.
-let address: URL;
-try {
-  address = new URL(urlText);
+  raw = readFileSync(sourcePath, "utf8");
 } catch {
-  fail(`not a URL: ${urlText}`);
+  fail(`cannot read ${sourcePath}`);
 }
-if (address.protocol !== 'https:') {
-  fail(`scheme must be https, got ${address.protocol}`);
+let post;
+try {
+  post = JSON.parse(raw);
+} catch {
+  fail("POST.json is not valid JSON");
 }
-if (address.hostname !== 'x.com') {
-  fail(`host must be x.com, got ${address.hostname}`);
+if (typeof post !== "object" || post === null || Array.isArray(post)) {
+  fail("POST.json must be a JSON object");
 }
-const pathMatch = POST_URL.exec(address.pathname);
-if (pathMatch === null) {
-  fail(`path must be /<handle>/status/<id>, got ${address.pathname}`);
-}
-const [, handle, postId] = pathMatch;
-if (handle.length === 0 || postId.length === 0) {
-  fail('handle and post id must not be empty');
+if (typeof post.url !== "string" || post.url.length === 0) {
+  fail('POST.json must contain a "url" string');
 }
 
-// Everything checks out: copy the file verbatim to the output directory.
-mkdirSync(outDir, { recursive: true });
+// 2. Validate the URL shape. URL parsing alone is not enough: a link to
+//    any other site, or to an X page that is not a single status, must fail.
+//    - scheme must be https
+//    - host must be exactly x.com (no subdomains, no twitter.com aliases)
+//    - path must be /<handle>/status/<digits> — handle is any non-empty
+//      segment without a slash, id is digits only
+//    - a trailing query or fragment is tolerated and ignored by the check
+let parsed;
 try {
-  writeFileSync(join(outDir, 'POST.json'), raw);
-} catch (err) {
-  fail(`cannot write POST.json to ${outDir}: ${(err as Error).message}`);
+  parsed = new URL(post.url);
+} catch {
+  fail(`not a parseable URL: ${post.url}`);
 }
+const parts = parsed.pathname.split("/").filter(Boolean);
+const handleOk = parts.length === 3 && parts[0].length > 0;
+const statusOk = parts[1] === "status" && /^\d+$/.test(parts[2] ?? "");
+if (parsed.protocol !== "https:" || parsed.hostname !== "x.com" || !handleOk || !statusOk) {
+  fail(
+    `url must look like https://x.com/<handle>/status/<id>, got: ${post.url}`,
+  );
+}
+
+// 3. Hand the file on, byte for byte, into the output directory.
+mkdirSync(outputDir, { recursive: true });
+writeFileSync(targetPath, raw, "utf8");
+console.log(`main.ts: wrote ${targetPath} (${post.url})`);
