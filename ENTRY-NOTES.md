@@ -1,4 +1,4 @@
-# ENTRY NOTES — gta6-meme-x-01
+# ENTRY NOTES — gta6-meme-x-01 (percobaan ke-2)
 
 ## Konsep meme
 Adegan kantor: seorang gamer pura-pura sakit menyerahkan surat sakit ke bosnya —
@@ -19,12 +19,13 @@ Satu-satunya konsep yang dipakai untuk entry ini (anti-duplikat).
 ## Play code
 `makefun-puffin-lute-beagle`
 
-## Hasil verifikasi (2026-11-19, ~22:33 WIB)
+## Hasil verifikasi (percobaan ke-2, 2026-11-19 ~22:57 WIB)
 - Langkah 2 (api.fxtwitter.com): author Dianepoxy; created_at Thu Nov 19 15:12:59 +0000 2026
   (setelah pembukaan 2026-11-19T14:00:00Z); teks memuat @makefunai + tautan bounty +
   play code makefun-puffin-lute-beagle; 1 foto terlampir; akun tidak protected. LULUS.
-- Langkah 3: git log terakhir 0c66c14a1ebfd7e1fb7ee962b04904d3e066c376;
-  POST.json = {"url": "https://x.com/Dianepoxy/status/2123434366542234008"};
+- Langkah 3: main.ts ditulis ulang dari nol di sesi ini (bukan starter byte-for-byte):
+  membaca POST.json, memvalidasi URL status x.com (https, host x.com,
+  path /<handle>/status/<id numerik>), menulis ke out/POST.json.
   `MAKEFUN_BOT_DIR=. MAKEFUN_OUTPUT_DIR=out node main.ts` → exit 0,
   out/POST.json identik dengan POST.json. LULUS.
 
